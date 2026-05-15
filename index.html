@@ -325,17 +325,17 @@ function clearAll() {
 
 
 function exportCSV() {
-  let csv = "Nr,V/S,K/S,V/W,K/W\n";
+  let csv = "Nr;V/S;K/S;V/W;K/W\n";
   const rows = getRows();
 
   rows.forEach((r, i) => {
     csv += [
       i + 1,
-      r.vs,
-      r.ks,
-      r.vw,
-      r.kw
-    ].join(",") + "\n";
+      (r.vs || '').toString().replace('.', ','),
+      (r.ks || '').toString().replace('.', ','),
+      (r.vw || '').toString().replace('.', ','),
+      (r.kw || '').toString().replace('.', ',')
+    ].join(";") + "\n";
   });
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
