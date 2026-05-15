@@ -63,6 +63,10 @@ th {
   font-weight: bold;
 }
 
+.measureCell {
+  cursor: pointer;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -167,6 +171,7 @@ const displayNames = ['V/S', 'K/S', 'V/W', 'K/W'];
 const table = document.getElementById('table');
 const overlay = document.getElementById('overlay');
 const info = document.getElementById('info');
+let selectedCellTarget = null;
 
 overlay.addEventListener('click', (e) => {
   if (e.target === overlay) {
@@ -196,7 +201,7 @@ function render() {
       <tr>
         <td>${i + 1}</td>
         ${displayFields.map(f => `
-          <td class="${i === pos.row && fieldOrder[pos.fieldIndex] === f ? 'activeCell' : ''}">
+          <td onclick="selectCell(${i}, '${f}')" class="measureCell ${i === pos.row && fieldOrder[pos.fieldIndex] === f ? 'activeCell' : ''}">
             ${r[f]}
           </td>
         `).join('')}
@@ -234,6 +239,17 @@ function buildValues() {
   }
 }
 
+
+function selectCell(rowIndex, fieldName) {
+  const pos = getPos();
+  pos.row = rowIndex;
+  pos.fieldIndex = fieldOrder.indexOf(fieldName);
+  selectedCellTarget = { row: rowIndex, field: fieldName };
+  render();
+  openPicker();
+}
+
+
 function openPicker() {
   const pos = getPos();
   if (pos.row >= 30) return;
@@ -267,6 +283,8 @@ function confirmValue(value) {
     field: field,
     previousValue: previousValue
   });
+
+  selectedCellTarget = null;
 
   pos.fieldIndex++;
 
@@ -325,25 +343,36 @@ function clearAll() {
 
 
 function exportCSV() {
-  let csv = "Nr;V/S;K/S;V/W;K/W\n";
-  const rows = getRows();
 
-  rows.forEach((r, i) => {
-    csv += [
-      i + 1,
-      (r.vs || '').toString().replace('.', ','),
-      (r.ks || '').toString().replace('.', ','),
-      (r.vw || '').toString().replace('.', ','),
-      (r.kw || '').toString().replace('.', ',')
-    ].join(";") + "\n";
+  let csv = "";
+
+  sheets.forEach((sheetItem, sheetIndex) => {
+
+    csv += sheetItem.name + "\n";
+    csv += "Nr;V/S;K/S;V/W;K/W\n";
+
+    rowsBySheet[sheetIndex].forEach((r, i) => {
+
+      csv += [
+        i + 1,
+        (r.vs || '').toString().replace('.', ','),
+        (r.ks || '').toString().replace('.', ','),
+        (r.vw || '').toString().replace('.', ','),
+        (r.kw || '').toString().replace('.', ',')
+      ].join(";") + "\n";
+
+    });
+
+    csv += "\n\n";
   });
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
   const link = document.createElement("a");
   const url = URL.createObjectURL(blob);
 
   link.setAttribute("href", url);
-  link.setAttribute("download", sheets[sheet].name + "_pomiary.csv");
+  link.setAttribute("download", "pomiary_6cm_8cm.csv");
 
   document.body.appendChild(link);
   link.click();
