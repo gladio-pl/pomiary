@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tabela Wysokości</title>
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: white;
+}
+
+.header {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  position: sticky;
+  top: 0;
+  background: #111;
+  z-index: 10;
+  flex-wrap: wrap;
+}
+
+button {
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: #333;
+  color: white;
+  font-size: 15px;
+}
+
+button:active {
+  background: #555;
+}
+
+#info {
+  padding: 10px;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #333;
+  padding: 8px;
+  text-align: center;
+  min-width: 54px;
+}
+
+th {
+  background: #222;
+}
+
+.activeCell {
+  background: #2d4d2d;
+  font-weight: bold;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.92);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.sliderBox {
+  width: 90%;
+  max-height: 85vh;
+  overflow: auto;
+  background: #1a1a1a;
+  padding: 16px;
+  border-radius: 16px;
+}
+
+.popupTop {
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  margin-bottom:10px;
+  position: sticky;
+  top: 0;
+  background:#1a1a1a;
+  padding-bottom: 8px;
+}
+
+.valueGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.valueBtn {
+  padding: 18px 10px;
+  font-size: 20px;
+  border-radius: 12px;
+  border: none;
+  background: #333;
+  color: white;
+}
+
+.valueBtn:active {
+  background: #666;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button onclick="setSheet(0)">8 cm</button>
+  <button onclick="setSheet(1)">6 cm</button>
+  <button onclick="undoLast()">Cofnij</button>
+  <button onclick="openPicker()">Wybierz</button>
+  <button onclick="exportCSV()">Excel</button>
+  <button onclick="clearAll()">Wyczyść wszystko</button>
+</div>
+
+<div id="info"></div>
+
+<table id="table"></table>
+
+<div class="overlay" id="overlay">
+  <div class="sliderBox">
+    <div class="popupTop">
+      <button onclick="undoLast(true)">Cofnij</button>
+      <button onclick="closePicker()">Zamknij</button>
+    </div>
+    <div id="valueGrid" class="valueGrid"></div>
+  </div>
+</div>
+
+<script>
+const sheets = [
+  { name: '8 cm', min: 75, max: 85 },
+  { name: '6 cm', min: 55, max: 65 }
+];
+
+let sheet = 0;
+
+let rowsBySheet = [
+  Array.from({ length: 30 }, () => ({ vs: '', vw: '', ks: '', kw: '' })),
+  Array.from({ length: 30 }, () => ({ vs: '', vw: '', ks: '', kw: '' }))
+];
+
+let positionsBySheet = [
+  { row: 0, fieldIndex: 0, history: [] },
+  { row: 0, fieldIndex: 0, history: [] }
+];
+
+// Kolejność WPISYWANIA: V/S -> V/W -> K/S -> K/W
+const fieldOrder = ['vs', 'vw', 'ks', 'kw'];
+const fieldNames = ['V/S', 'V/W', 'K/S', 'K/W'];
+
+// Kolejność WYŚWIETLANIA tabeli: V/S, K/S, V/W, K/W
+const displayFields = ['vs', 'ks', 'vw', 'kw'];
+const displayNames = ['V/S', 'K/S', 'V/W', 'K/W'];
+
+const table = document.getElementById('table');
+const overlay = document.getElementById('overlay');
+const info = document.getElementById('info');
+
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) {
+    closePicker();
+  }
+});
+
+function getRows() {
+  return rowsBySheet[sheet];
+}
+
+function getPos() {
+  return positionsBySheet[sheet];
+}
+
+function render() {
+  const rows = getRows();
+  const pos = getPos();
+
+  table.innerHTML = `
+    <tr>
+      <th>#</th>
+      ${displayNames.map(n => `<th>${n}</th>`).join('')}
+    </tr>
+
+    ${rows.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        ${displayFields.map(f => `
+          <td class="${i === pos.row && fieldOrder[pos.fieldIndex] === f ? 'activeCell' : ''}">
+            ${r[f]}
+          </td>
+        `).join('')}
+      </tr>
+    `).join('')}
+  `;
+
+  info.innerHTML = `
+    Arkusz: <b>${sheets[sheet].name}</b><br>
+    Wiersz: <b>${Math.min(pos.row + 1, 30)}</b><br>
+    Następny pomiar: <b>${fieldNames[pos.fieldIndex]}</b><br>
+    Kolejność wpisywania: <b>V/S → V/W → K/S → K/W</b>
+  `;
+
+  saveLocal();
+}
+
+function buildValues() {
+  const grid = document.getElementById('valueGrid');
+  grid.innerHTML = '';
+
+  const s = sheets[sheet];
+
+  for (let v = s.min; v <= s.max + 0.001; v += 0.5) {
+    const btn = document.createElement('button');
+
+    btn.className = 'valueBtn';
+    btn.innerText = v.toFixed(1) + ' mm';
+
+    btn.onclick = () => {
+      confirmValue(v.toFixed(1));
+    };
+
+    grid.appendChild(btn);
+  }
+}
+
+function openPicker() {
+  const pos = getPos();
+  if (pos.row >= 30) return;
+  buildValues();
+  overlay.style.display = 'flex';
+}
+
+function closePicker() {
+  overlay.style.display = 'none';
+}
+
+function confirmValue(value) {
+  const rows = getRows();
+  const pos = getPos();
+
+  if (pos.row >= 30) {
+    closePicker();
+    return;
+  }
+
+  const oldRow = pos.row;
+  const oldFieldIndex = pos.fieldIndex;
+  const field = fieldOrder[oldFieldIndex];
+  const previousValue = rows[oldRow][field];
+
+  rows[oldRow][field] = value;
+
+  pos.history.push({
+    row: oldRow,
+    fieldIndex: oldFieldIndex,
+    field: field,
+    previousValue: previousValue
+  });
+
+  pos.fieldIndex++;
+
+  if (pos.fieldIndex >= 4) {
+    pos.fieldIndex = 0;
+    pos.row++;
+  }
+
+  closePicker();
+  render();
+
+  if (pos.row < 30) {
+    setTimeout(openPicker, 150);
+  }
+}
+
+function undoLast(keepPickerOpen = false) {
+  const rows = getRows();
+  const pos = getPos();
+
+  if (!pos.history || pos.history.length === 0) return;
+
+  const last = pos.history.pop();
+
+  rows[last.row][last.field] = last.previousValue || '';
+
+  pos.row = last.row;
+  pos.fieldIndex = last.fieldIndex;
+
+  render();
+
+  if (keepPickerOpen) {
+    buildValues();
+    overlay.style.display = 'flex';
+  }
+}
+
+function setSheet(index) {
+  sheet = index;
+  closePicker();
+  render();
+}
+
+
+function clearAll() {
+  if (!confirm("Czy na pewno wyczyścić wszystkie pomiary w aktualnym arkuszu?")) return;
+
+  rowsBySheet[sheet] = Array.from({ length: 30 }, () => ({ vs: '', vw: '', ks: '', kw: '' }));
+  positionsBySheet[sheet] = { row: 0, fieldIndex: 0, history: [] };
+
+  closePicker();
+  render();
+
+  setTimeout(openPicker, 200);
+}
+
+
+function exportCSV() {
+  let csv = "Nr,V/S,K/S,V/W,K/W\n";
+  const rows = getRows();
+
+  rows.forEach((r, i) => {
+    csv += [
+      i + 1,
+      r.vs,
+      r.ks,
+      r.vw,
+      r.kw
+    ].join(",") + "\n";
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute("href", url);
+  link.setAttribute("download", sheets[sheet].name + "_pomiary.csv");
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function saveLocal() {
+  localStorage.setItem('tabelaWysokosci_rowsBySheet', JSON.stringify(rowsBySheet));
+  localStorage.setItem('tabelaWysokosci_positionsBySheet', JSON.stringify(positionsBySheet));
+  localStorage.setItem('tabelaWysokosci_sheet', String(sheet));
+}
+
+function loadLocal() {
+  const savedRows = localStorage.getItem('tabelaWysokosci_rowsBySheet');
+  const savedPositions = localStorage.getItem('tabelaWysokosci_positionsBySheet');
+  const savedSheet = localStorage.getItem('tabelaWysokosci_sheet');
+
+  if (savedRows) rowsBySheet = JSON.parse(savedRows);
+
+  if (savedPositions) {
+    positionsBySheet = JSON.parse(savedPositions);
+    positionsBySheet.forEach(p => {
+      if (!p.history) p.history = [];
+    });
+  }
+
+  if (savedSheet !== null) sheet = parseInt(savedSheet, 10);
+}
+
+loadLocal();
+render();
+
+setTimeout(openPicker, 500);
+</script>
+
+</body>
+</html>
