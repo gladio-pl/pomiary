@@ -89,12 +89,23 @@ th {
 .popupTop {
   display:flex;
   justify-content:flex-end;
+  align-items:center;
   gap:10px;
   margin-bottom:10px;
   position: sticky;
   top: 0;
   background:#1a1a1a;
   padding-bottom: 8px;
+}
+
+.counterBadge {
+  margin-right:auto;
+  background:#2d4d2d;
+  padding:10px 12px;
+  border-radius:10px;
+  font-weight:bold;
+  font-size:15px;
+  white-space:nowrap;
 }
 
 .valueGrid {
@@ -135,6 +146,7 @@ th {
 <div class="overlay" id="overlay">
   <div class="sliderBox">
     <div class="popupTop">
+      <div id="counterBadge" class="counterBadge">Pozostało: 120</div>
       <button onclick="undoLast(true)">Cofnij</button>
       <button onclick="closePicker()">Zamknij</button>
     </div>
@@ -187,6 +199,33 @@ function getPos() {
   return positionsBySheet[sheet];
 }
 
+
+function countFilledRows(rows) {
+  let filled = 0;
+
+  rows.forEach(r => {
+    if (r.vs !== '') filled++;
+    if (r.vw !== '') filled++;
+    if (r.ks !== '') filled++;
+    if (r.kw !== '') filled++;
+  });
+
+  return filled;
+}
+
+function remainingCount() {
+  return 120 - countFilledRows(getRows());
+}
+
+function updateCounter() {
+  const badge = document.getElementById('counterBadge');
+
+  if (badge) {
+    badge.innerText = 'Pozostało: ' + remainingCount();
+  }
+}
+
+
 function render() {
   const rows = getRows();
   const pos = getPos();
@@ -216,6 +255,7 @@ function render() {
     Kolejność wpisywania: <b>V/S → V/W → K/S → K/W</b>
   `;
 
+  updateCounter();
   saveLocal();
 }
 
@@ -254,6 +294,7 @@ function openPicker() {
   const pos = getPos();
   if (pos.row >= 30) return;
   buildValues();
+  updateCounter();
   overlay.style.display = 'flex';
 }
 
